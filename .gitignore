@@ -1,0 +1,17 @@
+# 构建产物
+build/
+app/build/
+.gradle/
+*.apk
+!releases/*.apk
+
+# 本机配置（含敏感信息，不入库）
+local.properties
+keystore.properties
+*.keystore
+*.jks
+
+# IDE
+.idea/
+*.iml
+.kotlin/

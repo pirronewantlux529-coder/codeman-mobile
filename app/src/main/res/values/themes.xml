@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Codeman" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#1E1E2E</item>
+        <item name="colorPrimaryVariant">#11111B</item>
+        <item name="colorSecondary">#89B4FA</item>
+        <item name="android:statusBarColor">#11111B</item>
+    </style>
+
+    <style name="Theme.Codeman.WithActionBar" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+        <item name="colorPrimary">#1E1E2E</item>
+        <item name="colorPrimaryVariant">#11111B</item>
+        <item name="colorSecondary">#89B4FA</item>
+        <item name="android:statusBarColor">#11111B</item>
+    </style>
+</resources>

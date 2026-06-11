@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Codeman</string>
+    <string name="menu">菜单</string>
+    <string name="menu_machines">机器管理</string>
+    <string name="menu_wireguard">WireGuard 设置</string>
+    <string name="menu_reload">刷新页面</string>
+    <string name="add_machine">添加机器</string>
+    <string name="edit_machine">编辑机器</string>
+    <string name="delete">删除</string>
+    <string name="save">保存</string>
+    <string name="saved">已保存</string>
+    <string name="cancel">取消</string>
+    <string name="hint_name">名称（如：家里电脑）</string>
+    <string name="hint_host">IP 地址（如：192.168.1.100）</string>
+    <string name="hint_port">端口（默认 8095）</string>
+    <string name="hint_user">用户名（默认 admin）</string>
+    <string name="hint_pass">密码</string>
+    <string name="use_https">使用 HTTPS（自签证书自动放行）</string>
+    <string name="wg_auto_connect">打开 App 时自动连接</string>
+    <string name="wg_config_hint">粘贴 WireGuard 配置（wg-quick .conf 格式）\n\n[Interface]\nPrivateKey = …\nAddress = …\n\n[Peer]\nPublicKey = …\nEndpoint = …\nAllowedIPs = …</string>
+    <string name="wg_connect">连接</string>
+    <string name="wg_disconnect">断开</string>
+    <string name="wg_connected">WireGuard：已连接 ●</string>
+    <string name="wg_disconnected">WireGuard：未连接 ○</string>
+</resources>

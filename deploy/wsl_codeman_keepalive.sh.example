@@ -1,0 +1,17 @@
+#!/bin/bash
+# Codeman keepalive（WSL 内执行）— 由 Windows 计划任务 CodemanWatchdog 周期调用。
+#
+# 重要：经 wsl.exe 启动的后台进程（即使 setsid）会在该 wsl.exe 退出后被 WSL 清场，
+# 所以这里把 codeman web 包在独立的 tmux server 里跑，tmux server 可以幸存。
+#
+# 使用前替换下面的占位符：<WSL用户名>、<你的密码>
+export HOME=/home/<WSL用户名>
+export PATH=/usr/local/bin:/home/<WSL用户名>/.local/bin:$PATH
+
+LOG="$HOME/.codeman/keepalive.log"
+
+if tmux -L codemanweb has-session -t web 2>/dev/null; then exit 0; fi
+
+echo "[$(date '+%F %T')] codeman down, relaunching in tmux" >> "$LOG"
+tmux -L codemanweb new-session -d -s web \
+  "export CODEMAN_PASSWORD=<你的密码> CODEMAN_PORT=8095 CODEMAN_HOST=0.0.0.0; exec $HOME/.local/bin/codeman web >> $LOG 2>&1"

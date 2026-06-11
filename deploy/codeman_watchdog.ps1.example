@@ -1,0 +1,20 @@
+# CodemanWatchdog（Windows 侧）— 计划任务每 5 分钟以管理员权限执行：
+# 1) 把 netsh portproxy 8095 同步到当前 WSL IP（WSL 重启后 IP 会变）
+# 2) 调 WSL 内 keepalive 脚本确保 codeman 进程活着
+#
+# 使用前替换 <Windows用户名>，并执行一次防火墙放行：
+#   netsh advfirewall firewall add rule name=Codeman8095 dir=in action=allow protocol=TCP localport=8095
+# 注册计划任务（管理员 PowerShell）：
+#   schtasks /create /tn CodemanWatchdog /tr "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Users\<Windows用户名>\.codeman\codeman_watchdog.ps1" /sc minute /mo 5 /rl highest /f
+$ErrorActionPreference = "SilentlyContinue"
+
+$wslIp = (wsl.exe hostname -I).Trim().Split(" ")[0]
+if ($wslIp -and $wslIp -match '^\d+\.\d+\.\d+\.\d+$') {
+    $cur = netsh interface portproxy show v4tov4 | Select-String "8095" | Out-String
+    if ($cur -notmatch [regex]::Escape($wslIp)) {
+        netsh interface portproxy delete v4tov4 listenport=8095 listenaddress=0.0.0.0 | Out-Null
+        netsh interface portproxy add v4tov4 listenport=8095 listenaddress=0.0.0.0 connectport=8095 connectaddress=$wslIp | Out-Null
+    }
+}
+
+wsl.exe bash /mnt/c/Users/<Windows用户名>/.codeman/wsl_codeman_keepalive.sh
