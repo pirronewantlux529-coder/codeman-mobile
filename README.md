@@ -1,8 +1,8 @@
 # Codeman Mobile
 
-[Codeman](https://github.com/Ark0N/Codeman) 的**第三方安卓客户端**（非官方）：在手机上管理跑在你电脑（WSL/Linux）里的 Claude Code / Codex / OpenCode 会话。
+**中文** | [English](#english)
 
-> Unofficial Android client for [Codeman](https://github.com/Ark0N/Codeman) — manage your Claude Code / Codex / OpenCode sessions running on a WSL/Linux box from your phone, with an embedded WireGuard tunnel and multi-machine switching.
+[Codeman](https://github.com/Ark0N/Codeman) 的**第三方安卓客户端**（非官方）：在手机上管理跑在你电脑（WSL/Linux）里的 Claude Code / Codex / OpenCode 会话，内嵌 WireGuard 隧道，支持多台电脑切换。
 
 ## 为什么需要它
 
@@ -16,7 +16,7 @@ Codeman 本身有非常好的手机 Web UI，但用浏览器访问有几件麻�
 
 ## 下载
 
-直接安装 [`releases/`](releases/) 目录下的 APK（arm64/universal，Android 8.0+）。
+到 [Releases](../../releases) 页面或 [`releases/`](releases/) 目录下载 APK（arm64/universal，Android 8.0+）。
 
 ## 自己构建
 
@@ -24,15 +24,6 @@ Codeman 本身有非常好的手机 Web UI，但用浏览器访问有几件麻�
 # 需要 JDK 17 + Android SDK 34
 cp keystore.properties.example keystore.properties   # 填你自己的签名信息
 gradle assembleRelease
-```
-
-`keystore.properties`（不入库）：
-
-```properties
-storeFile=你的.keystore
-storePassword=...
-keyAlias=...
-keyPassword=...
 ```
 
 ## 服务端部署（电脑侧）
@@ -63,3 +54,60 @@ cd ~/.codeman/app && npm run build
 - WireGuard 是 Jason A. Donenfeld 的注册商标
 
 本项目代码以 [MIT](LICENSE) 协议发布。与 Codeman、WireGuard 官方均无隶属关系。
+
+---
+
+# English
+
+An **unofficial Android client** for [Codeman](https://github.com/Ark0N/Codeman): manage Claude Code / Codex / OpenCode sessions running on your computer (WSL/Linux) from your phone, with an embedded WireGuard tunnel and multi-machine switching.
+
+## Why
+
+Codeman already ships an excellent mobile web UI, but raw browser access has friction: typing passwords every time, figuring out remote access yourself, juggling multiple addresses for multiple machines. This app wraps all of that:
+
+- **Multi-machine management** — add any number of computers (name/IP/port/credentials), switch with one tap from the floating bubble menu
+- **Embedded WireGuard** — uses the official `com.wireguard.android:tunnel` library; paste your existing wg-quick `.conf` and the tunnel auto-connects on app launch, no system WireGuard client needed
+- **Auto login** — natively answers Codeman's HTTP Basic auth, you land straight in the terminal
+- **Full-screen WebView + draggable bubble** — never covers Codeman's own multi-window/tab UI; the bubble turns green while the VPN is up
+- **Sessions never die** — sessions live in tmux on the computer; closing the app, losing signal, or locking the screen never interrupts your agents
+
+## Download
+
+Grab the APK from [Releases](../../releases) or the [`releases/`](releases/) directory (arm64/universal, Android 8.0+).
+
+## Build it yourself
+
+```bash
+# Requires JDK 17 + Android SDK 34
+cp keystore.properties.example keystore.properties   # fill in your own signing info
+gradle assembleRelease
+```
+
+## Server-side setup (on the computer)
+
+1. Install [Codeman](https://github.com/Ark0N/Codeman) in WSL/Linux
+2. Run it in HTTP mode (**important**: WebView's WebSocket connections bypass the self-signed-cert allowance, so self-signed HTTPS breaks the terminal stream; let WireGuard handle encryption):
+   ```bash
+   CODEMAN_PASSWORD=yourpass CODEMAN_PORT=8095 CODEMAN_HOST=0.0.0.0 codeman web
+   ```
+3. **WSL users**: the `deploy/` directory has ready-to-use templates for long-term operation:
+   - `wsl_codeman_keepalive.sh.example` — runs codeman inside a dedicated tmux server. **This matters**: background processes spawned via `wsl.exe` (even with `setsid`) get reaped when that wsl.exe exits; a tmux server is the reliable way to survive
+   - `codeman_watchdog.ps1.example` — Windows scheduled task: keeps the portproxy in sync with the changing WSL IP + keeps the process alive
+   - `tcp-relay.py.example` — TCP relay for when your phone can't route to the target machine's subnet
+
+## Unicode/CJK path patch
+
+Upstream Codeman currently validates case names and paths with ASCII-whitelist regexes, rejecting Chinese/Japanese/Korean directories. `patches/apply-unicode-patch.py` switches them to Unicode property classes while keeping the anti-injection design intact:
+
+```bash
+python3 patches/apply-unicode-patch.py ~/.codeman/app
+cd ~/.codeman/app && npm run build
+```
+
+## Credits & License
+
+- [Codeman](https://github.com/Ark0N/Codeman) (MIT) — this project is a companion client and contains none of its code; the patch script makes minimal MIT-licensed modifications to its source
+- [wireguard-android](https://git.zx2c4.com/wireguard-android/) (Apache-2.0) — embedded tunnel capability
+- WireGuard is a registered trademark of Jason A. Donenfeld
+
+Released under the [MIT License](LICENSE). Not affiliated with Codeman or WireGuard.
