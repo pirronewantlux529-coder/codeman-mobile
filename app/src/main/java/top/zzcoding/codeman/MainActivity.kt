@@ -114,7 +114,7 @@ class MainActivity : AppCompatActivity() {
         maybeAutoConnectVpn()
     }
 
-    /** 悬浮球：拖动换位置，点击弹菜单 */
+    /** 悬浮球：拖动换位置，点击弹菜单，长按打开文本选择 */
     @SuppressLint("ClickableViewAccessibility")
     private fun setupBubble() {
         var downX = 0f
@@ -122,31 +122,93 @@ class MainActivity : AppCompatActivity() {
         var startTx = 0f
         var startTy = 0f
         var dragging = false
+        var longFired = false
+        val longPress = Runnable {
+            longFired = true
+            bubble.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            openTextSelect()
+        }
         bubble.setOnTouchListener { v, ev ->
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = ev.rawX; downY = ev.rawY
                     startTx = v.translationX; startTy = v.translationY
-                    dragging = false
+                    dragging = false; longFired = false
+                    v.postDelayed(longPress, 500)
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = ev.rawX - downX
                     val dy = ev.rawY - downY
                     if (dragging || abs(dx) > 12 || abs(dy) > 12) {
+                        v.removeCallbacks(longPress)
                         dragging = true
                         v.translationX = startTx + dx
                         v.translationY = startTy + dy
                     }
                     true
                 }
-                MotionEvent.ACTION_UP -> {
-                    if (!dragging) showMenu(v)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    v.removeCallbacks(longPress)
+                    if (!dragging && !longFired && ev.actionMasked == MotionEvent.ACTION_UP) showMenu(v)
                     true
                 }
                 else -> false
             }
         }
+    }
+
+    /** 抓取终端缓冲区文本，放进原生可选择文本框（长按选择/系统复制菜单） */
+    private fun openTextSelect() {
+        webView.evaluateJavascript(
+            """
+            (function(){
+              try {
+                var b = app.terminal.buffer.active;
+                var out = [];
+                for (var i = 0; i < b.length; i++) {
+                  var l = b.getLine(i);
+                  if (l) out.push(l.translateToString(true));
+                }
+                return out.join('\n').replace(/\n+${'$'}/, '');
+              } catch(e) { return ''; }
+            })();
+            """.trimIndent()
+        ) { result ->
+            val text = try {
+                org.json.JSONTokener(result).nextValue() as? String ?: ""
+            } catch (_: Exception) { "" }
+            if (text.isBlank()) {
+                Toast.makeText(this, R.string.no_terminal_text, Toast.LENGTH_SHORT).show()
+                return@evaluateJavascript
+            }
+            showTextSelectDialog(text)
+        }
+    }
+
+    private fun showTextSelectDialog(text: String) {
+        val tv = android.widget.TextView(this).apply {
+            setText(text)
+            setTextIsSelectable(true)
+            typeface = android.graphics.Typeface.MONOSPACE
+            textSize = 12f
+            setPadding(40, 24, 40, 24)
+            setTextColor(0xFFCDD6F4.toInt())
+        }
+        val scroll = android.widget.ScrollView(this).apply {
+            addView(tv)
+            setBackgroundColor(0xFF1E1E2E.toInt())
+            post { fullScroll(View.FOCUS_DOWN) }
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.text_select_title)
+            .setView(scroll)
+            .setPositiveButton(R.string.copy_all) { _, _ ->
+                ClipboardBridge().write(text)
+                Toast.makeText(this, R.string.copied, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
     }
 
     override fun onResume() {
@@ -244,7 +306,7 @@ class MainActivity : AppCompatActivity() {
         webView.evaluateJavascript(
             """
             (function(){
-              if (window.__nativeClipInstalled) return; window.__nativeClipInstalled = true;
+              if (window.__nativeClipInstalled) return 'OK'; window.__nativeClipInstalled = true;
               var w = function(t){ AndroidClipboard.write(String(t)); return Promise.resolve(); };
               var r = function(){ return Promise.resolve(AndroidClipboard.read()); };
               try {
@@ -252,9 +314,15 @@ class MainActivity : AppCompatActivity() {
                 navigator.clipboard.writeText = w;
                 navigator.clipboard.readText = r;
               } catch(e) {}
+              return (navigator.clipboard && typeof navigator.clipboard.writeText === 'function'
+                      && typeof AndroidClipboard !== 'undefined') ? 'OK' : 'FAIL';
             })();
-            """.trimIndent(), null
-        )
+            """.trimIndent()
+        ) { result ->
+            if (result?.contains("OK") != true) {
+                Toast.makeText(this, R.string.clipboard_bridge_failed, Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     /** Codeman 未暴露行距设置，直接操作 xterm 的 lineHeight；terminal 异步创建，带重试 */

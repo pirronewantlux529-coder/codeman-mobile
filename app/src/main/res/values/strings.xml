@@ -9,6 +9,12 @@
     <string name="menu_font_smaller">字体 A−</string>
     <string name="menu_line_height">行距（当前 %.2f）</string>
     <string name="line_height_set">行距已设为 %.2f</string>
+    <string name="text_select_title">选择文本（长按选词，拖动手柄选段）</string>
+    <string name="copy_all">全部复制</string>
+    <string name="copied">已复制</string>
+    <string name="close">关闭</string>
+    <string name="no_terminal_text">没有抓到终端文本（终端未就绪？）</string>
+    <string name="clipboard_bridge_failed">剪贴板桥接失败，复制功能可能异常</string>
     <string name="add_machine">添加机器</string>
     <string name="edit_machine">编辑机器</string>
     <string name="delete">删除</string>
