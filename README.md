@@ -38,6 +38,31 @@ gradle assembleRelease
    - `codeman_watchdog.ps1.example` — Windows 计划任务：portproxy 自动跟随 WSL IP 变化 + 进程保活
    - `tcp-relay.py.example` — 手机路由不到目标网段时，在一台两边都通的服务器上做 TCP 中转
 
+## WireGuard 配置要点
+
+App 内"WireGuard 设置"接受标准 wg-quick `.conf` 全文，例如：
+
+```ini
+[Interface]
+PrivateKey = <手机端私钥>
+Address = 10.0.0.5/24
+DNS = 10.0.0.1          # 可选
+
+[Peer]
+PublicKey = <服务端公钥>
+Endpoint = your.ddns.example.com:51820
+AllowedIPs = 192.168.1.0/24, 10.0.0.0/24
+PersistentKeepalive = 25
+```
+
+注意事项：
+
+- **`AllowedIPs` 必须覆盖你在 App 里添加的每台机器的 IP/网段**，否则流量不会进隧道，机器连不上。这是最常见的"连不上"原因
+- 建议按上面这样**分流**（只把家里网段引进隧道），不要 `0.0.0.0/0` 全局接管，否则手机所有流量都走家里、又慢又费
+- 手机在 NAT 后面（蜂窝网络）务必加 `PersistentKeepalive = 25`
+- 首次连接 Android 会弹一次 VPN 授权对话框，同意即可；安卓系统同一时间只允许一个 VPN 活跃（开本 App 的隧道会顶掉其他 VPN，反之亦然）
+- 配置只保存在手机本地（SharedPreferences），不会上传到任何地方
+
 ## 中文/Unicode 路径补丁
 
 Codeman 上游目前用 ASCII 白名单正则校验项目名和路径，中文目录会被拒绝。`patches/apply-unicode-patch.py` 把校验改为 Unicode 属性类（保留防注入设计）：
@@ -94,6 +119,31 @@ gradle assembleRelease
    - `wsl_codeman_keepalive.sh.example` — runs codeman inside a dedicated tmux server. **This matters**: background processes spawned via `wsl.exe` (even with `setsid`) get reaped when that wsl.exe exits; a tmux server is the reliable way to survive
    - `codeman_watchdog.ps1.example` — Windows scheduled task: keeps the portproxy in sync with the changing WSL IP + keeps the process alive
    - `tcp-relay.py.example` — TCP relay for when your phone can't route to the target machine's subnet
+
+## WireGuard configuration notes
+
+The in-app "WireGuard Settings" accepts a full standard wg-quick `.conf`, e.g.:
+
+```ini
+[Interface]
+PrivateKey = <phone private key>
+Address = 10.0.0.5/24
+DNS = 10.0.0.1          # optional
+
+[Peer]
+PublicKey = <server public key>
+Endpoint = your.ddns.example.com:51820
+AllowedIPs = 192.168.1.0/24, 10.0.0.0/24
+PersistentKeepalive = 25
+```
+
+Things to know:
+
+- **`AllowedIPs` must cover the IP/subnet of every machine you add in the app** — otherwise traffic never enters the tunnel and the machine is unreachable. This is the #1 cause of "can't connect"
+- Prefer **split tunneling** as above (route only your home subnets) over `0.0.0.0/0`, which would drag all phone traffic through your home connection
+- Behind cellular NAT, always set `PersistentKeepalive = 25`
+- Android shows a one-time VPN permission dialog on first connect; the OS allows only one active VPN at a time (this app's tunnel will replace any other VPN, and vice versa)
+- The config is stored locally on the phone (SharedPreferences) and never uploaded anywhere
 
 ## Unicode/CJK path patch
 
