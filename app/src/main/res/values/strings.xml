@@ -5,6 +5,10 @@
     <string name="menu_machines">机器管理</string>
     <string name="menu_wireguard">WireGuard 设置</string>
     <string name="menu_reload">刷新页面</string>
+    <string name="menu_font_bigger">字体 A+</string>
+    <string name="menu_font_smaller">字体 A−</string>
+    <string name="menu_line_height">行距（当前 %.2f）</string>
+    <string name="line_height_set">行距已设为 %.2f</string>
     <string name="add_machine">添加机器</string>
     <string name="edit_machine">编辑机器</string>
     <string name="delete">删除</string>

@@ -2,6 +2,9 @@ package top.zzcoding.codeman
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.VpnService
@@ -10,6 +13,7 @@ import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
 import android.webkit.HttpAuthHandler
+import android.webkit.JavascriptInterface
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -35,7 +39,25 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val REQ_VPN = 100
+        private val LINE_HEIGHTS = floatArrayOf(1.0f, 1.15f, 1.3f, 1.5f)
     }
+
+    /** HTTP 环境下网页拿不到 navigator.clipboard，桥接到原生剪贴板 */
+    inner class ClipboardBridge {
+        @JavascriptInterface
+        fun write(text: String) {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("codeman", text))
+        }
+
+        @JavascriptInterface
+        fun read(): String {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            return cm.primaryClip?.getItemAt(0)?.coerceToText(this@MainActivity)?.toString() ?: ""
+        }
+    }
+
+    private fun prefs() = getSharedPreferences("ui", Context.MODE_PRIVATE)
 
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,6 +73,7 @@ class MainActivity : AppCompatActivity() {
             domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = false
         }
+        webView.addJavascriptInterface(ClipboardBridge(), "AndroidClipboard")
         webView.webChromeClient = WebChromeClient()
         webView.webViewClient = object : WebViewClient() {
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
@@ -79,6 +102,8 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 findViewById<View>(R.id.progress).visibility = View.GONE
+                injectClipboardPolyfill()
+                applyLineHeight(prefs().getFloat("lineHeight", 1.0f))
             }
         }
 
@@ -185,9 +210,12 @@ class MainActivity : AppCompatActivity() {
             val label = (if (m.id == current?.id) "✓ " else "    ") + m.name
             popup.menu.add(0, 100 + i, i, label)
         }
-        popup.menu.add(0, 1, 100, getString(R.string.menu_machines))
-        popup.menu.add(0, 2, 101, getString(R.string.menu_wireguard))
-        popup.menu.add(0, 3, 102, getString(R.string.menu_reload))
+        popup.menu.add(0, 4, 99, getString(R.string.menu_font_bigger))
+        popup.menu.add(0, 5, 100, getString(R.string.menu_font_smaller))
+        popup.menu.add(0, 6, 101, getString(R.string.menu_line_height, prefs().getFloat("lineHeight", 1.0f)))
+        popup.menu.add(0, 1, 102, getString(R.string.menu_machines))
+        popup.menu.add(0, 2, 103, getString(R.string.menu_wireguard))
+        popup.menu.add(0, 3, 104, getString(R.string.menu_reload))
         popup.setOnMenuItemClickListener {
             when {
                 it.itemId >= 100 -> {
@@ -199,10 +227,68 @@ class MainActivity : AppCompatActivity() {
                 it.itemId == 1 -> startActivity(Intent(this, MachinesActivity::class.java))
                 it.itemId == 2 -> startActivity(Intent(this, WgActivity::class.java))
                 it.itemId == 3 -> webView.reload()
+                it.itemId == 4 -> webView.evaluateJavascript(
+                    "try{app.increaseFontSize()}catch(e){}", null
+                )
+                it.itemId == 5 -> webView.evaluateJavascript(
+                    "try{app.decreaseFontSize()}catch(e){}", null
+                )
+                it.itemId == 6 -> cycleLineHeight()
             }
             true
         }
         popup.show()
+    }
+
+    private fun injectClipboardPolyfill() {
+        webView.evaluateJavascript(
+            """
+            (function(){
+              if (window.__nativeClipInstalled) return; window.__nativeClipInstalled = true;
+              var w = function(t){ AndroidClipboard.write(String(t)); return Promise.resolve(); };
+              var r = function(){ return Promise.resolve(AndroidClipboard.read()); };
+              try {
+                if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', {value:{}, configurable:true});
+                navigator.clipboard.writeText = w;
+                navigator.clipboard.readText = r;
+              } catch(e) {}
+            })();
+            """.trimIndent(), null
+        )
+    }
+
+    /** Codeman 未暴露行距设置，直接操作 xterm 的 lineHeight；terminal 异步创建，带重试 */
+    private fun applyLineHeight(value: Float) {
+        if (value == 1.0f) return
+        webView.evaluateJavascript(
+            """
+            (function(){
+              var n = 0;
+              var t = setInterval(function(){
+                n++;
+                try {
+                  if (window.app && app.terminal) {
+                    app.terminal.options.lineHeight = $value;
+                    if (app.fitAddon) app.fitAddon.fit();
+                    clearInterval(t);
+                  }
+                } catch(e) {}
+                if (n > 20) clearInterval(t);
+              }, 500);
+            })();
+            """.trimIndent(), null
+        )
+    }
+
+    private fun cycleLineHeight() {
+        val cur = prefs().getFloat("lineHeight", 1.0f)
+        val idx = LINE_HEIGHTS.indexOfFirst { it >= cur - 0.01f }.coerceAtLeast(0)
+        val next = LINE_HEIGHTS[(idx + 1) % LINE_HEIGHTS.size]
+        prefs().edit().putFloat("lineHeight", next).apply()
+        webView.evaluateJavascript(
+            "try{app.terminal.options.lineHeight=$next; app.fitAddon&&app.fitAddon.fit();}catch(e){}", null
+        )
+        Toast.makeText(this, getString(R.string.line_height_set, next), Toast.LENGTH_SHORT).show()
     }
 
     @Deprecated("Deprecated in Java")
