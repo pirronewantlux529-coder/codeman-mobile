@@ -13,6 +13,24 @@ Codeman 本身有非常好的手机 Web UI，但用浏览器访问有几件麻�
 - **自动登录**：原生代答 Codeman 的 HTTP Basic 认证，打开就是终端
 - **全屏 WebView + 可拖动悬浮球**：不遮挡 Codeman 自己的多窗口/标签 UI；VPN 连通时悬浮球变绿
 - **会话永不丢**：会话本来就跑在电脑端 tmux 里，手机退出/断网/熄屏都不影响 agent 继续干活
+- **推送提醒（v1.4）**：后台监听每台机器的 Codeman 事件流，agent 需要你确认、提问、等待输入、回复完成、任务完成、会话出错时直接弹系统通知，点通知跳到对应机器和会话
+
+## 推送提醒
+
+悬浮球菜单 →「通知设置」打开总开关。App 会常驻一条低优先级通知，并对每台已启用的机器保持一条到 `/api/events`（Codeman 的 SSE 事件流）的长连接，把事件转成系统通知：
+
+| 事件 | 来源 | 通知渠道 |
+|---|---|---|
+| 需要你确认（工具审批）、Claude 提问、会话出错 | Codeman 转发的 Claude Code hook 事件 `permission_prompt` / `elicitation_dialog`、`session:error` | 高优先级（响铃/震动） |
+| 等待输入、回复完成、任务完成、会话退出 | hook `idle_prompt` / `stop` / `task_completed`、`session:exit` | 默认优先级 |
+
+注意事项：
+
+- 事件来自 Codeman 服务端的 hook 事件流。**Claude Code 会话**（Codeman 自动写入 hooks）能收到全部类型；**Codex 等其他 CLI 会话**只有 Codeman 自己能感知的事件（空闲/退出/出错），没有工具审批和提问事件
+- 后台收通知的前提是 **WireGuard 隧道在后台保持连通**（App 内嵌隧道是 VPN 服务，通常息屏后仍在）；连接断开会按 3s→60s 指数退避自动重连，网络切换时立即重连
+- 国产 ROM 建议在通知设置里点「忽略电池优化」，并在系统里允许 App 自启动/后台运行，否则息屏一段时间后连接会被系统掐断
+- Android 13+ 首次打开会申请通知权限；每类事件、每台机器都可以单独关掉
+- 5 秒内同一会话的同类事件只通知一次；同一会话的新通知会覆盖旧通知
 
 ## 下载
 
@@ -95,6 +113,24 @@ Codeman already ships an excellent mobile web UI, but raw browser access has fri
 - **Auto login** — natively answers Codeman's HTTP Basic auth, you land straight in the terminal
 - **Full-screen WebView + draggable bubble** — never covers Codeman's own multi-window/tab UI; the bubble turns green while the VPN is up
 - **Sessions never die** — sessions live in tmux on the computer; closing the app, losing signal, or locking the screen never interrupts your agents
+- **Push-style notifications (v1.4)** — a background service listens to every machine's Codeman event stream and raises a system notification when an agent needs approval, asks a question, waits for input, finishes a reply or a task, or a session errors out; tapping it opens that machine and session
+
+## Notifications
+
+Bubble menu → **Notification settings** → master switch. The app keeps a low-priority persistent notification and one long-lived connection per enabled machine to `/api/events` (Codeman's SSE stream), turning events into system notifications:
+
+| Event | Source | Channel |
+|---|---|---|
+| Approval needed (tool permission), Claude asks a question, session error | Claude Code hook events relayed by Codeman: `permission_prompt` / `elicitation_dialog`, plus `session:error` | High priority (sound/vibration) |
+| Waiting for input, reply complete, task completed, session exited | hooks `idle_prompt` / `stop` / `task_completed`, plus `session:exit` | Default priority |
+
+Notes:
+
+- Events come from Codeman's hook stream. **Claude Code sessions** (Codeman installs the hooks) deliver every type; **Codex and other CLI sessions** only produce what Codeman itself can observe (idle/exit/error), so no approval or question events there
+- Background delivery requires the **WireGuard tunnel to stay up in the background** (the embedded tunnel is a VPN service and normally survives the screen turning off). Dropped connections reconnect with 3s→60s exponential backoff, and immediately on a network change
+- On aggressive OEM ROMs tap **Ignore battery optimizations** in the notification settings and allow autostart/background activity, otherwise the OS kills the connection after a while
+- Android 13+ asks for the notification permission on first enable; every event type and every machine can be toggled individually
+- Same session + same event type is notified at most once per 5 seconds; a newer notification for a session replaces the older one
 
 ## Download
 

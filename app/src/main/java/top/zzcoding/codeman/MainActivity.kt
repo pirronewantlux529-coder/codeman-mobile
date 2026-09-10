@@ -36,6 +36,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bubble: ImageButton
     private var current: Machine? = null
     private val scope = CoroutineScope(Dispatchers.Main)
+    /** 通知点击带来的会话 id，页面加载完成后注入 app.selectSession */
+    private var pendingSessionId: String? = null
 
     companion object {
         private const val REQ_VPN = 100
@@ -104,6 +106,7 @@ class MainActivity : AppCompatActivity() {
                 findViewById<View>(R.id.progress).visibility = View.GONE
                 injectClipboardPolyfill()
                 applyLineHeight(prefs().getFloat("lineHeight", 1.0f))
+                injectSelectSession()
             }
         }
 
@@ -111,7 +114,67 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread { updateBubbleTint(st) }
         }
 
+        handleNotificationIntent(intent)
         maybeAutoConnectVpn()
+        // 用户打开过推送提醒：确保监听服务在跑（被系统杀掉/强制停止后重新拉起）
+        if (NotifyPrefs.isEnabled(this) && !NotifyService.isRunning) {
+            try { NotifyService.start(this) } catch (_: Exception) {}
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (handleNotificationIntent(intent)) {
+            val m = MachineStore.selected(this)
+            if (m != null && current?.id == m.id && webView.url != null) {
+                // 同一台机器、页面已在：直接切会话
+                current = m
+                injectSelectSession()
+            } else if (m != null) {
+                current = m
+                webView.loadUrl(m.baseUrl)
+            }
+        }
+    }
+
+    /** 通知点击：切到对应机器并记住要打开的会话。返回是否带了通知参数。 */
+    private fun handleNotificationIntent(intent: Intent?): Boolean {
+        val machineId = intent?.getLongExtra(NotifyService.EXTRA_MACHINE_ID, -1L) ?: -1L
+        val sessionId = intent?.getStringExtra(NotifyService.EXTRA_SESSION_ID)
+        if (machineId < 0 && sessionId.isNullOrBlank()) return false
+        if (machineId >= 0 && MachineStore.load(this).any { it.id == machineId }) {
+            MachineStore.setSelected(this, machineId)
+        }
+        pendingSessionId = sessionId?.takeIf { it.isNotBlank() }
+        // 清掉 extras，避免旋转屏幕/重建时重复处理
+        intent?.removeExtra(NotifyService.EXTRA_MACHINE_ID)
+        intent?.removeExtra(NotifyService.EXTRA_SESSION_ID)
+        return true
+    }
+
+    /** 等 window.app 就绪后切到目标会话（500ms 轮询，最多 20 次）。 */
+    private fun injectSelectSession() {
+        val id = pendingSessionId ?: return
+        pendingSessionId = null
+        if (!Regex("^[A-Za-z0-9_-]{1,100}$").matches(id)) return
+        webView.evaluateJavascript(
+            """
+            (function(){
+              var n = 0;
+              var t = setInterval(function(){
+                n++;
+                try {
+                  if (window.app && typeof app.selectSession === 'function' && app.sessions && app.sessions.size > 0) {
+                    clearInterval(t);
+                    if (app.sessions.has('$id')) { app.selectSession('$id'); }
+                  }
+                } catch(e) {}
+                if (n > 20) clearInterval(t);
+              }, 500);
+            })();
+            """.trimIndent(), null
+        )
     }
 
     /** 悬浮球：拖动换位置，点击弹菜单，长按打开文本选择 */
@@ -277,7 +340,8 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(0, 6, 101, getString(R.string.menu_line_height, prefs().getFloat("lineHeight", 1.0f)))
         popup.menu.add(0, 1, 102, getString(R.string.menu_machines))
         popup.menu.add(0, 2, 103, getString(R.string.menu_wireguard))
-        popup.menu.add(0, 3, 104, getString(R.string.menu_reload))
+        popup.menu.add(0, 7, 104, getString(R.string.menu_notify))
+        popup.menu.add(0, 3, 105, getString(R.string.menu_reload))
         popup.setOnMenuItemClickListener {
             when {
                 it.itemId >= 100 -> {
@@ -296,6 +360,7 @@ class MainActivity : AppCompatActivity() {
                     "try{app.decreaseFontSize()}catch(e){}", null
                 )
                 it.itemId == 6 -> cycleLineHeight()
+                it.itemId == 7 -> startActivity(Intent(this, NotifyActivity::class.java))
             }
             true
         }
