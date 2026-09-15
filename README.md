@@ -14,6 +14,7 @@ Codeman 本身有非常好的手机 Web UI，但用浏览器访问有几件麻�
 - **全屏 WebView + 可拖动悬浮球**：不遮挡 Codeman 自己的多窗口/标签 UI；VPN 连通时悬浮球变绿
 - **会话永不丢**：会话本来就跑在电脑端 tmux 里，手机退出/断网/熄屏都不影响 agent 继续干活
 - **推送提醒（v1.4）**：后台监听每台机器的 Codeman 事件流，agent 需要你确认、提问、等待输入、回复完成、任务完成、会话出错时直接弹系统通知，点通知跳到对应机器和会话
+- **折叠屏 / 分屏多窗口（v1.5）**：悬浮球菜单「当前会话开到分屏」「新窗口（分屏）」在相邻一侧开第二个窗口，两边各看各的会话；网页里的会话弹出、文件预览「新标签打开」也会开到旁边。主窗口里被弹出的会话标记为 detached、终端尺寸交给侧边窗口（需 Codeman 带 `CodemanHost` 宿主接口的版本，见 Ark0N/Codeman#432；老版本仍可用菜单打开）。折叠/展开不再重建页面
 
 ## 推送提醒
 
@@ -114,6 +115,7 @@ Codeman already ships an excellent mobile web UI, but raw browser access has fri
 - **Full-screen WebView + draggable bubble** — never covers Codeman's own multi-window/tab UI; the bubble turns green while the VPN is up
 - **Sessions never die** — sessions live in tmux on the computer; closing the app, losing signal, or locking the screen never interrupts your agents
 - **Push-style notifications (v1.4)** — a background service listens to every machine's Codeman event stream and raises a system notification when an agent needs approval, asks a question, waits for input, finishes a reply or a task, or a session errors out; tapping it opens that machine and session
+- **Foldable / split-screen windows (v1.5)** — bubble menu **Open current session beside** / **New window (split)** opens a second window in the adjacent half, each showing its own session; the web UI's session pop-out and file-preview "open in new tab" land there too. The dashboard marks a popped-out session detached and leaves its terminal size to that window (needs a Codeman build with the `CodemanHost` contract, Ark0N/Codeman#432; older servers still work from the menu). Folding or unfolding no longer reloads the page
 
 ## Notifications
 

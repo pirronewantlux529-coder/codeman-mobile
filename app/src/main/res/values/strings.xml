@@ -4,6 +4,10 @@
     <string name="menu">菜单</string>
     <string name="menu_machines">机器管理</string>
     <string name="menu_wireguard">WireGuard 设置</string>
+    <string name="menu_session_window">当前会话开到分屏</string>
+    <string name="no_active_session">当前没有打开的会话</string>
+    <string name="menu_new_window">新窗口（分屏）</string>
+    <string name="window_open_failed">打开窗口失败：%s</string>
     <string name="menu_reload">刷新页面</string>
     <string name="menu_font_bigger">字体 A+</string>
     <string name="menu_font_smaller">字体 A−</string>

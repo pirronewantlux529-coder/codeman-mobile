@@ -20,13 +20,23 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 侧边窗口：可多开，折叠屏/分屏时开到相邻一侧 -->
+        <activity
+            android:name=".WindowActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity android:name=".MachinesActivity" android:exported="false"
             android:theme="@style/Theme.Codeman.WithActionBar" />

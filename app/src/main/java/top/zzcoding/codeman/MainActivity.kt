@@ -7,6 +7,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.net.VpnService
 import android.net.http.SslError
 import android.os.Bundle
@@ -30,11 +31,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
-class MainActivity : AppCompatActivity() {
+/**
+ * 主窗口。[WindowActivity] 继承它作为可多开的侧边窗口：折叠屏展开或分屏时，
+ * 网页里「在新窗口打开」的会话/文件预览经 CodemanHost 桥开到相邻一侧。
+ */
+open class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var bubble: ImageButton
-    private var current: Machine? = null
+    @Volatile protected var current: Machine? = null
     private val scope = CoroutineScope(Dispatchers.Main)
     /** 通知点击带来的会话 id，页面加载完成后注入 app.selectSession */
     private var pendingSessionId: String? = null
@@ -59,6 +64,96 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** 侧边窗口（可多开、固定机器、不处理通知/VPN 自动连接） */
+    protected open val isSideWindow = false
+
+    /** 本窗口显示的机器：主窗口跟随全局选择 */
+    protected open fun machineForWindow(): Machine? = MachineStore.selected(this)
+
+    /** 首次加载的地址 */
+    protected open fun startUrl(m: Machine): String = m.baseUrl
+
+    protected fun loadInWindow(url: String) = webView.loadUrl(url)
+
+    /** 菜单里切换机器 */
+    protected open fun chooseMachine(m: Machine) {
+        MachineStore.setSelected(this, m.id)
+        current = m
+        webView.loadUrl(m.baseUrl)
+    }
+
+    /**
+     * 暴露给 Codeman 网页的宿主能力（上游 hasHostWindows/openInHostWindow）：
+     * 同源页面在相邻窗口打开，其它地址交给系统浏览器。
+     */
+    inner class HostBridge {
+        @JavascriptInterface
+        fun openWindow(url: String): Boolean {
+            val m = current ?: return false
+            val uri = Uri.parse(url)
+            if (uri.scheme != "http" && uri.scheme != "https") return false
+            runOnUiThread {
+                try {
+                    if (isSameOrigin(uri, m)) openSideWindow(url, m)
+                    else startActivity(Intent(Intent.ACTION_VIEW, uri))
+                } catch (e: Exception) {
+                    Toast.makeText(this@MainActivity, getString(R.string.window_open_failed, e.message), Toast.LENGTH_SHORT).show()
+                }
+            }
+            return true
+        }
+
+        @JavascriptInterface
+        fun closeWindow() {
+            runOnUiThread { if (isSideWindow) finishAndRemoveTask() }
+        }
+    }
+
+    private fun isSameOrigin(uri: Uri, m: Machine): Boolean {
+        val port = if (uri.port != -1) uri.port else if (uri.scheme == "https") 443 else 80
+        return uri.host.equals(m.host, ignoreCase = true) && port == m.port &&
+            (uri.scheme == "https") == m.useHttps
+    }
+
+    /** 新开一个侧边窗口；分屏/折叠屏大屏上 LAUNCH_ADJACENT 会放到另一半 */
+    protected fun openSideWindow(url: String, m: Machine) {
+        val i = Intent(this, WindowActivity::class.java)
+            .putExtra(WindowActivity.EXTRA_URL, url)
+            .putExtra(WindowActivity.EXTRA_MACHINE_ID, m.id)
+            .addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
+                    Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT
+            )
+        startActivity(i)
+    }
+
+    /**
+     * 当前会话开到相邻窗口。新版 Codeman 走 app.detachSession（主窗口会把该标签标成
+     * detached、不再抢终端尺寸）；老版本没有宿主接口，直接打开 /session/<id>。
+     */
+    private fun openActiveSessionWindow() {
+        val m = current ?: return
+        webView.evaluateJavascript(
+            """
+            (function(){
+              try {
+                var id = window.app && app.activeSessionId;
+                if (!id) return '';
+                if (typeof app.hasHostWindows === 'function' && app.hasHostWindows()) { app.detachSession(id); return 'host'; }
+                return 'id:' + id;
+              } catch(e) { return ''; }
+            })();
+            """.trimIndent()
+        ) { result ->
+            val r = try { org.json.JSONTokener(result).nextValue() as? String ?: "" } catch (_: Exception) { "" }
+            when {
+                r == "host" -> {}
+                r.startsWith("id:") -> openSideWindow(m.baseUrl + "session/" + Uri.encode(r.removePrefix("id:")), m)
+                else -> Toast.makeText(this, R.string.no_active_session, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun prefs() = getSharedPreferences("ui", Context.MODE_PRIVATE)
 
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
@@ -76,6 +171,7 @@ class MainActivity : AppCompatActivity() {
             mediaPlaybackRequiresUserGesture = false
         }
         webView.addJavascriptInterface(ClipboardBridge(), "AndroidClipboard")
+        webView.addJavascriptInterface(HostBridge(), "CodemanHost")
         webView.webChromeClient = WebChromeClient()
         webView.webViewClient = object : WebViewClient() {
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
@@ -114,6 +210,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread { updateBubbleTint(st) }
         }
 
+        if (isSideWindow) return
         handleNotificationIntent(intent)
         maybeAutoConnectVpn()
         // 用户打开过推送提醒：确保监听服务在跑（被系统杀掉/强制停止后重新拉起）
@@ -276,14 +373,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        val m = MachineStore.selected(this)
+        val m = machineForWindow()
         if (m == null) {
-            startActivity(Intent(this, MachinesActivity::class.java))
+            if (isSideWindow) finish() else startActivity(Intent(this, MachinesActivity::class.java))
             return
         }
         if (current?.id != m.id || webView.url == null) {
             current = m
-            webView.loadUrl(m.baseUrl)
+            webView.loadUrl(if (webView.url == null) startUrl(m) else m.baseUrl)
         } else {
             current = m
         }
@@ -335,6 +432,8 @@ class MainActivity : AppCompatActivity() {
             val label = (if (m.id == current?.id) "✓ " else "    ") + m.name
             popup.menu.add(0, 100 + i, i, label)
         }
+        popup.menu.add(0, 9, 97, getString(R.string.menu_session_window))
+        popup.menu.add(0, 8, 98, getString(R.string.menu_new_window))
         popup.menu.add(0, 4, 99, getString(R.string.menu_font_bigger))
         popup.menu.add(0, 5, 100, getString(R.string.menu_font_smaller))
         popup.menu.add(0, 6, 101, getString(R.string.menu_line_height, prefs().getFloat("lineHeight", 1.0f)))
@@ -345,11 +444,10 @@ class MainActivity : AppCompatActivity() {
         popup.setOnMenuItemClickListener {
             when {
                 it.itemId >= 100 -> {
-                    val m = machines[it.itemId - 100]
-                    MachineStore.setSelected(this, m.id)
-                    current = m
-                    webView.loadUrl(m.baseUrl)
+                    chooseMachine(machines[it.itemId - 100])
                 }
+                it.itemId == 8 -> current?.let { m -> openSideWindow(m.baseUrl, m) }
+                it.itemId == 9 -> openActiveSessionWindow()
                 it.itemId == 1 -> startActivity(Intent(this, MachinesActivity::class.java))
                 it.itemId == 2 -> startActivity(Intent(this, WgActivity::class.java))
                 it.itemId == 3 -> webView.reload()
@@ -427,6 +525,15 @@ class MainActivity : AppCompatActivity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (webView.canGoBack()) webView.goBack()
+        else if (isSideWindow) finishAndRemoveTask()
         else @Suppress("DEPRECATION") super.onBackPressed()
+    }
+
+    override fun onDestroy() {
+        if (isSideWindow) {
+            (webView.parent as? android.view.ViewGroup)?.removeView(webView)
+            webView.destroy()
+        }
+        super.onDestroy()
     }
 }
